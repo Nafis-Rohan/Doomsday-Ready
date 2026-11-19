@@ -10,7 +10,6 @@ class PrerequisiteSerializer(serializers.ModelSerializer):
 
 
 class MovieSerializer(serializers.ModelSerializer):
-
     releaseYear = serializers.IntegerField(source="release_year")
     runtimeMinutes = serializers.IntegerField(source="runtime_minutes")
     prerequisites = PrerequisiteSerializer(many=True, read_only=True)
@@ -29,7 +28,8 @@ class MovieSerializer(serializers.ModelSerializer):
             "createdAt",
             "updatedAt",
         ]
-        
+
+
 class PrerequisiteRefField(serializers.Field):
     def to_internal_value(self, data):
         if isinstance(data, bool) or not isinstance(data, int | str):
@@ -55,6 +55,4 @@ class MovieWriteSerializer(serializers.Serializer):
         source="runtime_minutes", min_value=1, max_value=300
     )
     watched = serializers.BooleanField(required=False, default=False)
-    prerequisites = serializers.ListField(
-        child=PrerequisiteRefField(), required=False
-    )
+    prerequisites = serializers.ListField(child=PrerequisiteRefField(), required=False)

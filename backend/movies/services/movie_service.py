@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from core.exceptions import CircularDependency, DuplicateTitle, UnknownPrerequisite
 from movies.models import Movie, MoviePrerequisite
 
-from .graph import find_cycle_path
+from .graph import find_any_cycle, find_cycle_path
 
 # Any constant number works. Every write that changes the graph takes this
 # lock first, so two requests can never both pass the cycle check and then
@@ -64,12 +64,8 @@ def resolve_prerequisites(refs: list[int | str]) -> list[int]:
     return resolved
 
 
-def ensure_no_cycle(movie: Movie, prereq_ids: list[int]) -> None:
-    """Raise CircularDependency if these prerequisites would create a loop."""
-    cycle = find_cycle_path(movie.id, prereq_ids, load_prereq_graph())
-    if cycle is None:
-        return
-
+def raise_cycle_error(cycle: list[int]) -> None:
+    """Turn a loop (list of movie ids) into a 409 CIRCULAR_DEPENDENCY error."""
     titles = dict(Movie.objects.filter(id__in=cycle).values_list("id", "title"))
     names = [titles[movie_id] for movie_id in cycle]
     if len(cycle) == 2:
@@ -81,6 +77,13 @@ def ensure_no_cycle(movie: Movie, prereq_ids: list[int]) -> None:
             "directly or through other movies."
         )
     raise CircularDependency(message=message, details={"cycle": names})
+
+
+def ensure_no_cycle(movie: Movie, prereq_ids: list[int]) -> None:
+    """Raise CircularDependency if these prerequisites would create a loop."""
+    cycle = find_cycle_path(movie.id, prereq_ids, load_prereq_graph())
+    if cycle is not None:
+        raise_cycle_error(cycle)
 
 
 @transaction.atomic
@@ -114,3 +117,55 @@ def update_movie(movie_id: int, data: dict) -> Movie:
         )
 
     return movie
+
+
+@transaction.atomic
+def create_movies(items: list[dict]) -> list[Movie]:
+    """Create one or more movies at once. All of them are saved, or none.
+
+    A prerequisite given as a title can point at a movie created in the same
+    request, so a whole franchise can be created in one call.
+    """
+    lock_graph()
+
+    lowered = [item["title"].lower() for item in items]
+    if len(set(lowered)) != len(lowered):
+        raise DuplicateTitle(
+            message="The request contains the same title more than once."
+        )
+    taken = list(
+        Movie.objects.annotate(lower_title=Lower("title"))
+        .filter(lower_title__in=lowered)
+        .values_list("title", flat=True)
+    )
+    if taken:
+        raise DuplicateTitle(details={"titles": taken})
+
+    movies = Movie.objects.bulk_create(
+        Movie(
+            title=item["title"],
+            release_year=item["release_year"],
+            runtime_minutes=item["runtime_minutes"],
+            watched=item.get("watched", False),
+        )
+        for item in items
+    )
+
+    # The new movies exist inside this transaction now, so titles that point
+    # at other new movies resolve too.
+    graph = load_prereq_graph()
+    links = []
+    for movie, item in zip(movies, items, strict=True):
+        prereq_ids = resolve_prerequisites(item.get("prerequisites", []))
+        graph[movie.id] = prereq_ids
+        links.extend(
+            MoviePrerequisite(movie=movie, prerequisite_id=pid) for pid in prereq_ids
+        )
+
+    # The old graph had no loops, so any loop found now involves a new movie.
+    cycle = find_any_cycle(graph)
+    if cycle is not None:
+        raise_cycle_error(cycle)
+
+    MoviePrerequisite.objects.bulk_create(links)
+    return movies
