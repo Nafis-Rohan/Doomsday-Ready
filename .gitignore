@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+
+# Env and secrets
+.env
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
