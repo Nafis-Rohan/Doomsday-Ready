@@ -1,18 +1,32 @@
-# Create your views here.
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Movie
-from .serializers import MovieSerializer
+from .serializers import MovieSerializer, MovieWriteSerializer
 from .services.graph import rewatch_order
-from .services.movie_service import load_prereq_graph
+from .services.movie_service import load_prereq_graph, update_movie
 
 
 class MovieListView(APIView):
     def get(self, request):
         movies = Movie.objects.prefetch_related("prerequisites")
         return Response(MovieSerializer(movies, many=True).data)
+
+
+class MovieDetailView(APIView):
+    def get(self, request, pk):
+        queryset = Movie.objects.prefetch_related("prerequisites")
+        movie = get_object_or_404(queryset, pk=pk)
+        return Response(MovieSerializer(movie).data)
+
+    def patch(self, request, pk):
+        serializer = MovieWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        update_movie(pk, serializer.validated_data)
+
+        movie = Movie.objects.prefetch_related("prerequisites").get(pk=pk)
+        return Response(MovieSerializer(movie).data)
 
 
 class RewatchOrderView(APIView):
