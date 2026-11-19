@@ -137,3 +137,16 @@ MAILERS = {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    # No login in this app. Without this, being logged into /admin in the
+    # same browser would make DRF demand a CSRF token on POST/PATCH.
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+}
+
+# Our URLs have no trailing slash (e.g. /api/movies), so never redirect.
+APPEND_SLASH = False
