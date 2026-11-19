@@ -4,11 +4,10 @@ from collections import deque
 Prereqs = dict[int, list[int]]
 
 
-""" collect_ancestors """
+# --- collect_ancestors ---
 
 
 def collect_ancestors(target_id: int, prereqs: Prereqs) -> set[int]:
-
     visited: set[int] = set()
     queue = deque(prereqs.get(target_id, []))
 
@@ -22,7 +21,7 @@ def collect_ancestors(target_id: int, prereqs: Prereqs) -> set[int]:
     return visited
 
 
-""" rewatch_order """
+# --- rewatch_order ---
 
 
 def rewatch_order(
@@ -30,6 +29,7 @@ def rewatch_order(
     prereqs: Prereqs,
     sort_keys: dict[int, tuple],
 ) -> list[int]:
+
     ancestors = collect_ancestors(target_id, prereqs)
 
     remaining = {m: len(set(prereqs.get(m, []))) for m in ancestors}
@@ -57,7 +57,7 @@ def rewatch_order(
     return order
 
 
-""" find_cycle_path """
+# --- find_cycle_path ---
 
 
 def find_cycle_path(
@@ -88,5 +88,43 @@ def find_cycle_path(
                     path.reverse()
                     return [movie_id] + path
                 queue.append(next_id)
+
+    return None
+
+
+# --- find_any_cycle ---
+
+# DFS colours: not visited yet / on the current path / fully explored
+_WHITE, _GREY, _BLACK = 0, 1, 2
+
+
+def find_any_cycle(prereqs: Prereqs) -> list[int] | None:
+    nodes = set(prereqs)
+    for deps in prereqs.values():
+        nodes.update(deps)
+
+    color = {node: _WHITE for node in nodes}
+
+    for root in sorted(nodes):
+        if color[root] != _WHITE:
+            continue
+
+        color[root] = _GREY
+        path = [root]
+        iterators = [iter(prereqs.get(root, []))]
+
+        while iterators:
+            for next_id in iterators[-1]:
+                if color[next_id] == _GREY:
+                    start = path.index(next_id)
+                    return path[start:] + [next_id]
+                if color[next_id] == _WHITE:
+                    color[next_id] = _GREY
+                    path.append(next_id)
+                    iterators.append(iter(prereqs.get(next_id, [])))
+                    break
+            else:
+                color[path.pop()] = _BLACK
+                iterators.pop()
 
     return None

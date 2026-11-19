@@ -1,7 +1,10 @@
+from itertools import pairwise
+
 import pytest
 
 from movies.services.graph import (
     collect_ancestors,
+    find_any_cycle,
     find_cycle_path,
     rewatch_order,
 )
@@ -154,3 +157,65 @@ def test_cycle_detection_on_long_chain_has_no_recursion_limit():
     assert path is not None
     assert path[0] == 1 and path[-1] == 1
     assert len(path) == 2001
+
+
+def assert_is_cycle(path, graph):
+    """A valid loop starts and ends on the same movie; each depends on the next."""
+    assert path[0] == path[-1]
+    for current, nxt in pairwise(path):
+        assert nxt in graph[current]
+
+
+def test_any_cycle_valid_graph_returns_none():
+    assert find_any_cycle(MCU) is None
+
+
+def test_any_cycle_self_loop():
+    assert find_any_cycle({1: [1]}) == [1, 1]
+
+
+def test_any_cycle_two_movies():
+    assert find_any_cycle({1: [2], 2: [1]}) == [1, 2, 1]
+
+
+def test_any_cycle_three_movies():
+    assert find_any_cycle({1: [2], 2: [3], 3: [1]}) == [1, 2, 3, 1]
+
+
+def test_any_cycle_found_next_to_a_valid_part():
+    graph = {1: [2], 2: [], 3: [4], 4: [5], 5: [3]}
+    path = find_any_cycle(graph)
+    assert path == [3, 4, 5, 3]
+    assert_is_cycle(path, graph)
+
+
+def test_any_cycle_movie_that_only_appears_as_a_prerequisite():
+    assert find_any_cycle({1: [2]}) is None
+
+
+def test_any_cycle_diamond_is_not_a_cycle():
+    assert find_any_cycle({1: [2, 3], 2: [4], 3: [4], 4: []}) is None
+
+
+def test_any_cycle_bulk_create_with_new_movies_referencing_each_other():
+    graph = {**MCU, 9: [10], 10: [9]}
+    path = find_any_cycle(graph)
+    assert path == [9, 10, 9]
+    assert_is_cycle(path, graph)
+
+
+def test_any_cycle_long_chain_without_cycle():
+    chain = {1: []}
+    for i in range(2, 2001):
+        chain[i] = [i - 1]
+    assert find_any_cycle(chain) is None
+
+
+def test_any_cycle_long_cycle_has_no_recursion_limit():
+    chain = {1: [2000]}
+    for i in range(2, 2001):
+        chain[i] = [i - 1]
+    path = find_any_cycle(chain)
+    assert path is not None
+    assert len(path) == 2001
+    assert_is_cycle(path, chain)
