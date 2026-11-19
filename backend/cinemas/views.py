@@ -32,9 +32,7 @@ class CinemaListView(APIView):
         created = create_cinemas(items)
 
         data = CinemaSerializer(created, many=True).data
-        return Response(
-            data if is_batch else data[0], status=status.HTTP_201_CREATED
-        )
+        return Response(data if is_batch else data[0], status=status.HTTP_201_CREATED)
 
 
 class CinemaDetailView(APIView):
