@@ -1,9 +1,31 @@
+import { CheckCircle2, Circle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getRewatchOrder, listMovies } from '../api/movies'
+import { getRewatchOrder, listMovies, updateMovie } from '../api/movies'
 import ErrorBanner from '../components/ErrorBanner'
-import type { Movie, RewatchOrder } from '../types'
+import type { Movie, RewatchMovie, RewatchOrder } from '../types'
 import { formatRuntime } from '../utils/formatRuntime'
+
+function withWatched(
+  plan: RewatchOrder,
+  movieId: number,
+  watched: boolean,
+): RewatchOrder {
+  const order = plan.order.map((m) =>
+    m.id === movieId ? { ...m, watched } : m,
+  )
+  const unwatched = order.filter((m) => !m.watched)
+  return {
+    ...plan,
+    order,
+    watchedCount: order.length - unwatched.length,
+    unwatchedCount: unwatched.length,
+    remainingRuntimeMinutes: unwatched.reduce(
+      (sum, m) => sum + m.runtimeMinutes,
+      0,
+    ),
+  }
+}
 
 export default function RewatchPlanPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -38,6 +60,22 @@ export default function RewatchPlanPage() {
       setSearchParams({})
     } else {
       setSearchParams({ target: value })
+    }
+  }
+
+  async function toggleWatched(movie: RewatchMovie) {
+    if (!plan) return
+    setError(null)
+    const previous = plan
+    const watched = !movie.watched
+
+    // Show the change right away; undo it if the server says no.
+    setPlan(withWatched(plan, movie.id, watched))
+    try {
+      await updateMovie(movie.id, { watched })
+    } catch (err) {
+      setError(err)
+      setPlan(previous)
     }
   }
 
@@ -82,19 +120,51 @@ export default function RewatchPlanPage() {
 
       {visiblePlan && visiblePlan.order.length > 0 && (
         <div className="card">
-          <p className="muted">
-            {visiblePlan.watchedCount} of {visiblePlan.totalCount} watched ·{' '}
-            {formatRuntime(visiblePlan.remainingRuntimeMinutes)} left
+          <p style={{ margin: '0 0 6px' }}>
+            <strong>
+              {visiblePlan.watchedCount} of {visiblePlan.totalCount} watched
+            </strong>
           </p>
-          <ol>
+          <progress
+            className="rewatch-progress"
+            value={visiblePlan.watchedCount}
+            max={visiblePlan.totalCount}
+            aria-label={`${visiblePlan.watchedCount} of ${visiblePlan.totalCount} prerequisites watched`}
+          />
+          <p className="muted">
+            {visiblePlan.unwatchedCount === 0
+              ? `All caught up. You're ready for ${visiblePlan.target.title}!`
+              : `${formatRuntime(visiblePlan.remainingRuntimeMinutes)} of watching left before ${visiblePlan.target.title}`}
+          </p>
+
+          <ol className="rewatch-list">
             {visiblePlan.order.map((movie) => (
               <li key={movie.id}>
-                <span className={movie.watched ? 'watched-title' : undefined}>
-                  {movie.title}
-                </span>{' '}
-                <span className="muted">
-                  ({movie.releaseYear}, {formatRuntime(movie.runtimeMinutes)})
-                </span>
+                <div className="rewatch-row">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => toggleWatched(movie)}
+                    aria-pressed={movie.watched}
+                    aria-label={
+                      movie.watched
+                        ? `Mark ${movie.title} as not watched`
+                        : `Mark ${movie.title} as watched`
+                    }
+                  >
+                    {movie.watched ? (
+                      <CheckCircle2 size={22} color="#1a8f4a" />
+                    ) : (
+                      <Circle size={22} />
+                    )}
+                  </button>
+                  <span className={movie.watched ? 'watched-title' : undefined}>
+                    {movie.title}
+                  </span>
+                  <span className="muted">
+                    ({movie.releaseYear}, {formatRuntime(movie.runtimeMinutes)})
+                  </span>
+                </div>
               </li>
             ))}
           </ol>
