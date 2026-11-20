@@ -4,6 +4,9 @@ Plan your movie marathon, and book cinema seats for the whole group.
 
 Built for the **Blinto Talent Accelerator 2027** Full Stack Developer Internship assessment.
 
+## Deployed 
+https://doomsday-ready-psi.vercel.app
+
 ## What is this project?
 
 Two small problems, one app:
